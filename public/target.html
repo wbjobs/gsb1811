@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>目标页面 - __DEFENSE_LABEL__</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="target">
+  <div class="target-card">
+    <h1>🎯 受保护目标页面</h1>
+    <p>当前防护策略：<strong id="defense-label">__DEFENSE_LABEL__</strong></p>
+    <p>嵌套状态：<strong id="framed-status">检测中…</strong></p>
+    <button id="transfer-btn" type="button">模拟转账（敏感操作）</button>
+    <ul id="detection-log" class="log"></ul>
+  </div>
+
+  <script>
+    'use strict';
+    var DEFENSE_KEY = '__DEFENSE_KEY__';
+    var DEFENSE_LABEL = '__DEFENSE_LABEL__';
+    var JS_BUSTER_ENABLED = __JS_BUSTER__;
+
+    /**
+     * JS 防嵌套（frame-busting）：检测到被嵌套时尝试跳出到顶层。
+     * 注意：该手段可被 iframe sandbox / 204 跳转等手法绕过（见 attack 页面演示），
+     * 因此仅作为纵深防御的一层，必须配合 CSP frame-ancestors 使用。
+     */
+    function frameBust() {
+      if (window.self !== window.top) {
+        try {
+          window.top.location = window.self.location.href;
+        } catch (err) {
+          // 跨域时直接赋值通常仍允许；读取属性才会抛错。此处兜底记录。
+          report('js-buster-error', 'medium', 'frame-busting 执行异常: ' + err.message);
+        }
+      }
+    }
+
+    function report(type, severity, detail) {
+      var payload = {
+        type: type,
+        severity: severity,
+        defense: DEFENSE_KEY,
+        detail: detail,
+        page: 'target',
+        ua: navigator.userAgent,
+      };
+      try {
+        if (navigator.sendBeacon) {
+          navigator.sendBeacon('/api/event', JSON.stringify(payload));
+        } else {
+          fetch('/api/event', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+            keepalive: true,
+          }).catch(function () {});
+        }
+      } catch (err) { /* 上报失败不影响页面 */ }
+    }
+
+    function logLine(msg) {
+      var li = document.createElement('li');
+      li.textContent = new Date().toLocaleTimeString() + ' ' + msg;
+      var ul = document.getElementById('detection-log');
+      ul.insertBefore(li, ul.firstChild);
+    }
+
+    function detectFraming() {
+      var framed = window.self !== window.top;
+      var el = document.getElementById('framed-status');
+      el.textContent = framed ? '⚠️ 页面正被 iframe 嵌套' : '✅ 顶层窗口运行';
+      el.className = framed ? 'bad' : 'good';
+      if (framed) {
+        report('framing-detected', 'high', '页面被第三方 iframe 嵌套加载');
+        logLine('检测到嵌套加载');
+        // 跨域读取 top.location 会抛 SecurityError，借此确认嵌套方来源不可信
+        try {
+          void window.top.location.href;
+          logLine('top 同源，可读取 location');
+        } catch (err) {
+          report('cross-origin-parent', 'info', '嵌套页面为跨域来源（' + err.name + '）');
+          logLine('嵌套方为跨域来源');
+        }
+      }
+      return framed;
+    }
+
+    /** UI 欺骗检测：检查自身是否被透明化/遮挡/缩小等常见点击劫持手法 */
+    function detectUIDeception() {
+      try {
+        var style = window.getComputedStyle(document.documentElement);
+        var opacity = parseFloat(style.opacity || '1');
+        if (opacity < 1) {
+          report('ui-deception', 'high', '页面透明度被设置为 ' + opacity + '，疑似透明层点击劫持');
+          logLine('检测到透明度欺骗 opacity=' + opacity);
+        }
+        if (document.hidden) {
+          report('ui-deception', 'medium', '页面在不可见状态下被加载（visibilityState=hidden）');
+          logLine('页面不可见却被加载');
+        }
+        if (window.innerWidth < 50 || window.innerHeight < 50) {
+          report('ui-deception', 'high', '视口尺寸异常小 (' + window.innerWidth + 'x' + window.innerHeight + ')，疑似隐藏 iframe');
+          logLine('视口尺寸异常');
+        }
+      } catch (err) {
+        report('detector-error', 'low', 'UI 欺骗检测异常: ' + err.message);
+      }
+    }
+
+    /**
+     * Web Worker 心跳检测：Worker 独立线程定时回包。
+     * 若主线程被攻击者用 beforeunload/长任务冻结（frame-buster 绕过手法），
+     * 心跳会中断，据此上报异常。
+     */
+    function startWorkerHeartbeat() {
+      if (typeof Worker === 'undefined') {
+        logLine('当前浏览器不支持 Web Worker，心跳检测已跳过');
+        report('worker-unsupported', 'low', '浏览器不支持 Web Worker');
+        return;
+      }
+      try {
+        var worker = new Worker('/static/detector-worker.js');
+        var lastBeat = Date.now();
+        worker.onmessage = function (e) {
+          if (e.data && e.data.type === 'heartbeat') lastBeat = Date.now();
+        };
+        worker.onerror = function (err) {
+          report('worker-error', 'low', 'Worker 异常: ' + (err.message || 'unknown'));
+        };
+        setInterval(function () {
+          var gap = Date.now() - lastBeat;
+          if (gap > 3000) {
+            report('heartbeat-stall', 'medium', '主线程心跳停滞 ' + gap + 'ms，疑似遭遇冻结型绕过');
+            logLine('心跳停滞 ' + gap + 'ms');
+            lastBeat = Date.now();
+          }
+        }, 1500);
+      } catch (err) {
+        report('worker-error', 'low', 'Worker 启动失败: ' + err.message);
+        logLine('Worker 启动失败: ' + err.message);
+      }
+    }
+
+    window.addEventListener('error', function (e) {
+      report('page-error', 'low', '页面脚本错误: ' + e.message);
+    });
+
+    if (JS_BUSTER_ENABLED) frameBust();
+    detectFraming();
+    detectUIDeception();
+    startWorkerHeartbeat();
+
+    document.getElementById('transfer-btn').addEventListener('click', function () {
+      logLine('⚠️ 敏感操作被触发（若你并未点击，说明可能遭遇点击劫持）');
+      report('sensitive-action', 'critical', '目标页面敏感操作被触发');
+    });
+  </script>
+</body>
+</html>

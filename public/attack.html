@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>攻击演示页面</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  .stage { position: relative; width: 640px; height: 320px; border: 2px dashed #c0392b; overflow: hidden; background: #fff; }
+  .stage iframe { width: 100%; height: 100%; border: 0; }
+  .decoy { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+           flex-direction: column; gap: 12px; pointer-events: none; z-index: 10; }
+  .decoy button { pointer-events: auto; }
+  .technique-opacity iframe { opacity: 0.05; }
+  .technique-opacity .decoy { z-index: 20; }
+</style>
+</head>
+<body>
+  <h1>😈 攻击者页面（点击劫持演示）</h1>
+  <p>防护策略：<strong id="defense-name"></strong> · 攻击手法：<strong id="technique-name"></strong></p>
+  <p id="verdict" class="verdict">加载中…</p>
+
+  <div class="stage" id="stage">
+    <div class="decoy" id="decoy" hidden>
+      <p>🎁 点击领取奖品！</p>
+      <button type="button">免费领取</button>
+    </div>
+  </div>
+
+  <h2>攻击日志</h2>
+  <ul id="attack-log" class="log"></ul>
+
+  <p><a href="/">← 返回仪表盘</a></p>
+
+  <script>
+    'use strict';
+
+    var params = new URLSearchParams(location.search);
+    var defense = params.get('defense') || 'none';
+    var technique = params.get('technique') || 'plain';
+
+    var TECHNIQUES = {
+      'plain': { label: '直接嵌套', desc: '最基础的 iframe 嵌套' },
+      'sandbox': { label: 'sandbox 属性绕过', desc: 'iframe sandbox 禁用目标 JS，使 frame-busting 失效' },
+      'opacity': { label: '透明层欺骗', desc: '目标 iframe 设为近乎透明，覆盖诱饵按钮诱导点击' },
+      'double-frame': { label: '双重嵌套', desc: '嵌套两层 iframe，干扰单层 frame-busting 逻辑' },
+      'beforeunload': { label: 'beforeunload 冻结', desc: '注册 beforeunload 干扰目标跳出导航' },
+    };
+
+    var tech = TECHNIQUES[technique] || TECHNIQUES.plain;
+    document.getElementById('defense-name').textContent = defense;
+    document.getElementById('technique-name').textContent = tech.label;
+
+    function log(msg) {
+      var li = document.createElement('li');
+      li.textContent = new Date().toLocaleTimeString() + ' ' + msg;
+      var ul = document.getElementById('attack-log');
+      ul.insertBefore(li, ul.firstChild);
+    }
+
+    function report(type, severity, detail) {
+      try {
+        fetch('/api/event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: type, severity: severity, defense: defense,
+            technique: technique, detail: detail, page: 'attack',
+          }),
+        }).catch(function () {});
+      } catch (err) { /* 忽略上报失败 */ }
+    }
+
+    function buildFrame() {
+      var stage = document.getElementById('stage');
+      var iframe = document.createElement('iframe');
+      var targetUrl = '/target?defense=' + encodeURIComponent(defense);
+
+      if (technique === 'sandbox') {
+        // 不给 allow-scripts：目标 JS（含 frame-buster）无法执行
+        iframe.setAttribute('sandbox', 'allow-forms');
+        log('已设置 sandbox（无 allow-scripts），目标 JS 将被禁用');
+      }
+      if (technique === 'opacity') {
+        stage.classList.add('technique-opacity');
+        document.getElementById('decoy').hidden = false;
+        log('目标 iframe 已设为 opacity 0.05，并覆盖诱饵层');
+      }
+      if (technique === 'double-frame') {
+        iframe.src = '/attack?defense=' + encodeURIComponent(defense) + '&technique=plain&nested=1';
+        log('第一层嵌套指向自身（nested=1），形成双重嵌套');
+      } else {
+        iframe.src = targetUrl;
+      }
+      if (technique === 'beforeunload') {
+        window.addEventListener('beforeunload', function (e) {
+          // 目标 frame-buster 尝试导航顶层窗口时触发，干扰其跳出
+          e.preventDefault();
+          e.returnValue = '';
+          log('beforeunload 已拦截一次顶层导航尝试');
+          report('bypass-attempt', 'high', 'beforeunload 拦截了 frame-busting 跳转');
+        });
+        log('已注册 beforeunload 拦截器');
+      }
+
+      iframe.addEventListener('error', function () {
+        var verdict = document.getElementById('verdict');
+        verdict.textContent = '✅ 防护生效：浏览器拒绝加载目标（CSP/XFO）';
+        verdict.className = 'verdict good';
+        report('attack-blocked', 'info', tech.label + ' 触发 iframe error，被 ' + defense + ' 拦截');
+        log('iframe 触发 error 事件，加载被拦截');
+      });
+
+      iframe.addEventListener('load', function () {
+        log('iframe 加载完成: ' + iframe.src);
+        setTimeout(function () {
+          var blocked = false;
+          try {
+            // 同源演示环境下可探测内容是否被 CSP/XFO 拦截
+            var doc = iframe.contentDocument;
+            blocked = !doc || !doc.body || doc.body.children.length === 0;
+          } catch (err) {
+            blocked = true;
+          }
+          var verdict = document.getElementById('verdict');
+          if (blocked) {
+            verdict.textContent = '✅ 防护生效：目标内容未能加载（被 CSP/XFO 拦截）';
+            verdict.className = 'verdict good';
+            report('attack-blocked', 'info', tech.label + ' 被 ' + defense + ' 防护拦截');
+            log('攻击被拦截');
+          } else {
+            verdict.textContent = '⚠️ 目标已加载：防护未生效或已被绕过（' + tech.label + '）';
+            verdict.className = 'verdict bad';
+            report('attack-loaded', 'high', tech.label + ' 成功加载目标（defense=' + defense + '）');
+            log('目标已加载，攻击面存在');
+          }
+        }, 600);
+      });
+
+      stage.appendChild(iframe);
+    }
+
+    window.addEventListener('error', function (e) {
+      log('脚本错误: ' + e.message);
+      report('attack-page-error', 'low', '攻击页脚本错误: ' + e.message);
+    });
+
+    if (params.get('nested') === '1') {
+      document.body.innerHTML = '<p>中间嵌套层</p>';
+      var inner = document.createElement('iframe');
+      inner.src = '/target?defense=' + encodeURIComponent(defense);
+      inner.width = 600; inner.height = 280;
+      document.body.appendChild(inner);
+    } else {
+      buildFrame();
+    }
+  </script>
+</body>
+</html>

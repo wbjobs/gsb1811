@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>点击劫持攻防演练平台</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <h1>🛡️ 点击劫持（Clickjacking）攻防演练平台</h1>
+  <p class="meta">iframe + CSP frame-ancestors + JS 防嵌套 + Web Worker 检测 · 事件实时汇总 · 报告可导出</p>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <section>
+    <h2>演练矩阵</h2>
+    <p>选择防护策略与攻击手法，在新标签页打开攻击演示。目标页与攻击页会将检测事件上报到下方列表。</p>
+    <table id="matrix">
+      <thead><tr><th>防护策略 \ 攻击手法</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>实时检测事件</h2>
+    <div class="toolbar">
+      <button id="refresh-btn" type="button">刷新</button>
+      <button id="reset-btn" type="button">清空事件</button>
+      <a class="btn" href="/api/report?fmt=json" download>导出 JSON 报告</a>
+      <a class="btn" href="/api/report?fmt=html" download>导出 HTML 报告</a>
+      <label><input type="checkbox" id="auto-refresh" checked> 自动刷新</label>
+    </div>
+    <table id="events-table">
+      <thead><tr><th>#</th><th>时间</th><th>类型</th><th>防护</th><th>手法</th><th>级别</th><th>详情</th></tr></thead>
+      <tbody><tr><td colspan="7">暂无事件</td></tr></tbody>
+    </table>
+  </section>
+
+  <script>
+    'use strict';
+
+    var DEFENSES = [
+      ['none', '无防护'],
+      ['csp-none', "CSP frame-ancestors 'none'"],
+      ['csp-self', "CSP frame-ancestors 'self'"],
+      ['xfo', 'X-Frame-Options: DENY'],
+      ['js-buster', 'JS 防嵌套'],
+      ['combined', '组合防护'],
+    ];
+    var TECHNIQUES = [
+      ['plain', '直接嵌套'],
+      ['sandbox', 'sandbox 绕过'],
+      ['opacity', '透明层欺骗'],
+      ['double-frame', '双重嵌套'],
+      ['beforeunload', 'beforeunload 冻结'],
+    ];
+
+    function showToast(msg, isError) {
+      var t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = 'toast ' + (isError ? 'bad' : 'good');
+      t.hidden = false;
+      setTimeout(function () { t.hidden = true; }, 4000);
+    }
+
+    function buildMatrix() {
+      var thead = document.querySelector('#matrix thead tr');
+      TECHNIQUES.forEach(function (t) {
+        var th = document.createElement('th');
+        th.textContent = t[1];
+        thead.appendChild(th);
+      });
+      var tbody = document.querySelector('#matrix tbody');
+      DEFENSES.forEach(function (d) {
+        var tr = document.createElement('tr');
+        var th = document.createElement('th');
+        th.textContent = d[1];
+        tr.appendChild(th);
+        TECHNIQUES.forEach(function (t) {
+          var td = document.createElement('td');
+          var a = document.createElement('a');
+          a.className = 'btn small';
+          a.target = '_blank';
+          a.rel = 'noopener';
+          a.href = '/attack?defense=' + d[0] + '&technique=' + t[0];
+          a.textContent = '演示';
+          td.appendChild(a);
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+    }
+
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+
+    function loadEvents() {
+      fetch('/api/events')
+        .then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
+        .then(function (data) {
+          var tbody = document.querySelector('#events-table tbody');
+          var events = (data.events || []).slice().reverse();
+          if (!events.length) {
+            tbody.innerHTML = '<tr><td colspan="7">暂无事件</td></tr>';
+            return;
+          }
+          tbody.innerHTML = events.map(function (e) {
+            return '<tr class="sev-' + esc(e.severity || 'info') + '"><td>' + e.id + '</td><td>' +
+              esc(e.time) + '</td><td>' + esc(e.type) + '</td><td>' + esc(e.defense || '-') +
+              '</td><td>' + esc(e.technique || '-') + '</td><td>' + esc(e.severity || '-') +
+              '</td><td>' + esc(e.detail || '') + '</td></tr>';
+          }).join('');
+        })
+        .catch(function (err) {
+          showToast('事件加载失败: ' + err.message, true);
+        });
+    }
+
+    document.getElementById('refresh-btn').addEventListener('click', loadEvents);
+    document.getElementById('reset-btn').addEventListener('click', function () {
+      fetch('/api/reset', { method: 'POST' })
+        .then(function () { showToast('事件已清空', false); loadEvents(); })
+        .catch(function (err) { showToast('清空失败: ' + err.message, true); });
+    });
+
+    setInterval(function () {
+      if (document.getElementById('auto-refresh').checked) loadEvents();
+    }, 2000);
+
+    window.addEventListener('error', function (e) {
+      showToast('页面脚本错误: ' + e.message, true);
+    });
+
+    buildMatrix();
+    loadEvents();
+  </script>
+</body>
+</html>
