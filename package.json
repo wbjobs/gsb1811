@@ -1,0 +1,12 @@
+{
+  "name": "frame-defense-lab",
+  "version": "1.0.0",
+  "description": "frame-ancestors / JS 防嵌套 / UI 欺骗检测 多层防护、绕过演示与报告实验室",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.test.js"
+  },
+  "engines": { "node": ">=16" },
+  "license": "MIT"
+}

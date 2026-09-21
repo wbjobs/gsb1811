@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sandbox 绕过 frame-busting</title>
+<style>
+  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; background:#24292f; color:#e6edf3; }
+  .notice { background:#cf222e; color:#fff; padding:8px 16px; font-size:13px; }
+  .wrap { max-width:980px; margin:20px auto; padding:0 16px; display:grid; grid-template-columns:1fr 300px; gap:18px; }
+  @media (max-width:800px){ .wrap{ grid-template-columns:1fr; } }
+  .card { background:#161b22; border:1px solid #30363d; border-radius:10px; padding:16px; }
+  iframe { width:100%; height:620px; border:1px dashed #f85149; border-radius:8px; background:#fff; }
+  ol { font-size:13px; line-height:1.9; padding-left:20px; }
+  code { background:#000; padding:1px 6px; border-radius:4px; color:#79c0ff; }
+  a { color:#56d4dd; }
+  label { font-size:13px; display:block; margin-bottom:8px; }
+  select, button { background:#30363d; color:#fff; border:1px solid #8b949e; border-radius:6px; padding:6px 10px; font-size:13px; }
+</style>
+</head>
+<body>
+<div class="notice">实验 2：<b>HTML5 iframe sandbox 绕过 JS frame-busting</b>——证明“只靠 JS 防嵌套”不可靠。</div>
+<div class="wrap">
+  <div class="card">
+    <iframe id="lab-frame" title="victim" src="http://localhost:8080/protected"
+            sandbox="allow-scripts allow-same-origin"></iframe>
+  </div>
+  <div class="card">
+    <h3 style="margin:0 0 10px;font-size:15px">复现步骤</h3>
+    <ol>
+      <li>到 <a href="http://localhost:8080/" target="_blank" rel="noopener">控制台</a>
+        关闭 <b>CSP frame-ancestors</b> 与 <b>X-Frame-Options</b>，保存。</li>
+      <li>切换下面的 sandbox 组合，然后刷新本页。</li>
+      <li>观察 iframe 内：<code>top.location</code> 跳转被吞掉，页面顶部出现红色拦截横幅。</li>
+      <li>回控制台查看报告：JS 记录 <code>顶层跳转被阻止</code>，Worker 仍在取证。</li>
+      <li>重新开启 CSP/XFO 并刷新——即使保留 sandbox，浏览器也直接不渲染。</li>
+    </ol>
+    <label>sandbox 组合
+      <select id="mode">
+        <option value="allow-scripts allow-same-origin">allow-scripts + allow-same-origin（同域 frame-bust 可执行但 top 导航被禁）</option>
+        <option value="allow-scripts">仅 allow-scripts（跨域唯一来源：origin）</option>
+        <option value="allow-scripts allow-same-origin allow-top-navigation">再加 allow-top-navigation（逃生跳转恢复）</option>
+        <option value="">无 sandbox（普通嵌套，JS 跳转成功）</option>
+      </select>
+    </label>
+    <button id="apply" type="button">应用并重新加载</button>
+    <p style="font-size:12px;color:#8b949e;margin-top:14px">
+      要点：sandbox 是攻击者可控的宿主属性，受害者页面无法拒绝；因此 JS 防嵌套只能告警/遮挡，
+      真正的“禁止加载”必须由浏览器层的 <code>frame-ancestors</code> 完成。
+    </p>
+  </div>
+</div>
+<script>
+  const frame = document.getElementById('lab-frame');
+  document.getElementById('apply').addEventListener('click', () => {
+    const val = document.getElementById('mode').value;
+    if (val) frame.setAttribute('sandbox', val);
+    else frame.removeAttribute('sandbox');
+    frame.src = frame.src;
+  });
+</script>
+</body>
+</html>

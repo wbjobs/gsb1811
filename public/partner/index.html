@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>可信合作方站点（白名单嵌套）</title>
+<style>
+  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; background:#f0f6fc; color:#1f2328; }
+  header { background:#1a7f37; color:#fff; padding:14px 20px; font-weight:600; }
+  .wrap { max-width:900px; margin:20px auto; padding:0 16px; }
+  .card { background:#fff; border:1px solid #d0d7de; border-radius:10px; padding:16px; margin-bottom:16px; }
+  iframe { width:100%; height:640px; border:1px solid #aceebb; border-radius:8px; }
+  .ok { color:#1a7f37; font-size:13px; }
+  .warn { color:#9a6700; font-size:13px; }
+  code { background:#eef1f4; padding:1px 5px; border-radius:4px; }
+  label { font-size:13px; }
+</style>
+</head>
+<body>
+<header>🤝 可信合作方站点 :9002（已加入 frame-ancestors 白名单）</header>
+<div class="wrap">
+  <div class="card">
+    <p class="ok" id="msg">✓ 当前来源在受保护站点的 <code>frame-ancestors</code> 白名单中，页面应正常加载。</p>
+    <label class="warn">对比：在 8080 控制台关闭“白名单合作方”开关并刷新本页——本来源立即被拒绝，且生成 CSP 报告。</label>
+  </div>
+  <iframe title="protected-partner-view" src="http://localhost:8080/protected"></iframe>
+</div>
+</body>
+</html>

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>受保护页面 · 转账中心</title>
+<style>
+  :root { --ok:#1a7f37; --warn:#9a6700; --crit:#cf222e; --bg:#f6f8fa; --card:#fff; --line:#d0d7de; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background:var(--bg); color:#1f2328; }
+  header { background:#0d1117; color:#fff; padding:14px 20px; display:flex; align-items:center; gap:12px; }
+  header .logo { width:26px; height:26px; border-radius:6px; background:linear-gradient(135deg,#2f81f7,#1f6feb); display:inline-block; }
+  header small { color:#8b949e; }
+  main { max-width:760px; margin:24px auto; padding:0 16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:20px 22px; margin-bottom:16px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  h2 { font-size:15px; margin:0 0 12px; }
+  label { display:block; font-size:13px; color:#57606a; margin:10px 0 4px; }
+  input { width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:6px; font-size:14px; }
+  button { margin-top:16px; padding:10px 18px; border:0; border-radius:6px; background:#1f6feb; color:#fff; font-size:14px; cursor:pointer; }
+  button:hover { background:#1860d0; }
+  .status { display:flex; flex-wrap:wrap; gap:8px; }
+  .pill { font-size:12px; padding:3px 10px; border-radius:999px; border:1px solid var(--line); background:#f6f8fa; color:#57606a; }
+  .pill.on { background:#dafbe1; border-color:#aceebb; color:var(--ok); }
+  .pill.off { background:#fff1e5; border-color:#ffd8b5; color:#bc4c00; }
+  .pill.err { background:#ffebe9; border-color:#ffcecb; color:var(--crit); }
+  .log { font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:12px; background:#0d1117; color:#7ee787; border-radius:8px; padding:12px; height:180px; overflow:auto; white-space:pre-wrap; }
+  /* 异常横幅 */
+  #defense-banner { display:none; position:fixed; inset:0; z-index:2147483647; background:rgba(207,34,46,.96); color:#fff;
+    flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:24px; }
+  #defense-banner.show { display:flex; }
+  #defense-banner h2 { color:#fff; font-size:22px; margin-bottom:10px; }
+  #defense-banner button { background:#fff; color:var(--crit); font-weight:600; }
+  /* 页面自身做实验时可能被透明覆盖，保持内容可被“劫持”以演示 */
+  .hint { font-size:12px; color:#57606a; }
+  .frame-mark { display:none; }
+  body.is-framed .frame-mark { display:inline; }
+</style>
+</head>
+<body>
+<header>
+  <span class="logo"></span>
+  <div>安全银行 <small>转账中心（受防护页面 /protected） <span class="frame-mark">⚠ 当前处于 iframe 嵌套中</span></small></div>
+</header>
+
+<main>
+  <section class="card">
+    <h1>转账</h1>
+    <p class="hint">这是一个模拟的敏感操作页面，用于演示点击劫持。任何“点击”都会被记录，不会发生真实交易。</p>
+    <label for="to">收款账户</label>
+    <input id="to" value="6222 **** **** 8888">
+    <label for="amount">金额（元）</label>
+    <input id="amount" value="10000">
+    <button id="pay-btn" type="button">确认转账</button>
+    <p id="pay-result" class="hint"></p>
+  </section>
+
+  <section class="card">
+    <h2>防护运行状态</h2>
+    <div id="status" class="status"></div>
+  </section>
+
+  <section class="card">
+    <h2>本地事件日志</h2>
+    <div id="log" class="log"></div>
+    <p class="hint">完整报告请在控制台 <a href="/" target="_blank" rel="noopener">http://localhost:8080</a> 查看与导出。</p>
+  </section>
+</main>
+
+<!-- 防嵌套全屏横幅（逃生跳转） -->
+<div id="defense-banner" role="alert" aria-live="assertive">
+  <h2 id="banner-title">检测到页面被非法嵌套</h2>
+  <p id="banner-text">为防止点击劫持，页面内容已被遮挡。请确认你正在访问真实的安全银行站点。</p>
+  <button type="button" id="banner-escape">在新窗口打开真实页面</button>
+</div>
+
+<script>
+  // 由服务器按当前防护配置注入；__REPORT_ENDPOINT__ 同理
+  window.__DEFENSE_CONFIG__ = __CONFIG__;
+  window.__REPORT_ENDPOINT__ = '__REPORT_ENDPOINT__';
+</script>
+<script src="/protected.js"></script>
+</body>
+</html>

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🎣 攻击者站点 - 点击劫持演示</title>
+<style>
+  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; background:#24292f; color:#e6edf3; }
+  .notice { background:#9a6700; color:#fff; padding:8px 16px; font-size:13px; }
+  .controls { padding:10px 16px; background:#161b22; border-bottom:1px solid #30363d; font-size:13px; display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
+  .controls a { color:#56d4dd; }
+  .controls label { cursor:pointer; }
+  /* 诱饵层 */
+  .stage { position:relative; width:760px; max-width:100%; margin:24px auto; height:640px; }
+  #victim-frame { position:absolute; top:0; left:50%; transform:translateX(-50%); width:760px; height:640px; border:0; opacity:0; z-index:2; }
+  #victim-frame.ghost { opacity:.35; outline:2px dashed #f85149; }
+  .lure { position:absolute; inset:0; z-index:1; background:linear-gradient(160deg,#1d4ed8,#0ea5e9); border-radius:14px; padding:30px; }
+  .lure h1 { font-size:26px; margin:0 0 6px; }
+  .lure p { opacity:.9; }
+  .prize { position:absolute; left:50%; top:285px; transform:translateX(-50%); background:#facc15; color:#78350f; border:0; border-radius:10px; padding:14px 34px; font-size:18px; font-weight:700; box-shadow:0 6px 18px rgba(0,0,0,.3); }
+  /* iframe 被 CSP 拒绝时通常是空白，给出诊断 */
+  #diag { position:absolute; left:50%; top:120px; transform:translateX(-50%); width:520px; max-width:90%; background:#0d1117ee; border:1px solid #f85149; border-radius:10px; padding:16px; font-size:13px; z-index:3; display:none; }
+  #diag.show { display:block; }
+  #diag b { color:#ff9492; }
+  code { background:#00000055; padding:1px 5px; border-radius:4px; }
+</style>
+</head>
+<body>
+<div class="notice">⚠ 本页仅用于安全教学：模拟攻击者用 <b>透明 iframe + 位置对齐的诱饵按钮</b> 劫持用户对“确认转账”的点击。不会发生真实交易。</div>
+<div class="controls">
+  <label><input type="checkbox" id="ghost"> 显示 iframe 轮廓（看穿劫持结构）</label>
+  <button id="diag-btn" type="button" style="background:#30363d;color:#fff;border:1px solid #8b949e;border-radius:6px;padding:5px 10px;cursor:pointer">为什么我点不到？</button>
+  <a href="/sandbox.html">下一个实验：sandbox 绕过 frame-busting →</a>
+</div>
+
+<div class="stage">
+  <div class="lure">
+    <h1>🎉 恭喜！您获得一张 1000 元观影券</h1>
+    <p>仅此一份，点击下方按钮立即领取：</p>
+    <button class="prize" type="button">🎁 立即领取 1000 元</button>
+    <p style="position:absolute;bottom:20px;opacity:.7;font-size:12px">（教学演示页面，无实际奖励）</p>
+  </div>
+
+  <!-- 诱饵按钮与受保护页“确认转账”按钮位置对齐；iframe 完全透明 -->
+  <iframe id="victim-frame" title="victim"
+          src="http://localhost:8080/protected"></iframe>
+
+  <div id="diag">
+    <b>当前现象：iframe 区域空白，攻击失败。</b><br><br>
+    受保护站点的响应头包含 <code>Content-Security-Policy: frame-ancestors ...</code>
+    （可能还有 <code>X-Frame-Options: DENY</code>），浏览器在渲染前就拒绝了本来源的嵌套——
+    JS 根本没有机会运行，这是点击劫持最强的防线。<br><br>
+    想复现“劫持成功”？到 <a href="http://localhost:8080/" target="_blank" rel="noopener" style="color:#56d4dd">控制台</a>
+    关闭 <b>CSP frame-ancestors</b> 与 <b>X-Frame-Options</b>（保留 JS 防嵌套可顺便观察它的告警），刷新本页再点“领奖”。
+  </div>
+</div>
+
+<script>
+  const frame = document.getElementById('victim-frame');
+  document.getElementById('ghost').addEventListener('change', (e) => {
+    frame.classList.toggle('ghost', e.target.checked);
+  });
+  document.getElementById('diag-btn').addEventListener('click', () => {
+    document.getElementById('diag').classList.toggle('show');
+  });
+  // 跨域 iframe 内部无法读取；onload 只说明请求完成，不代表内容被允许渲染。
+  frame.addEventListener('load', () => {
+    console.log('[attacker] 受保护页 iframe 触发 load（跨域下无法区分是内容还是 CSP 拦截后的空白）');
+  });
+</script>
+</body>
+</html>

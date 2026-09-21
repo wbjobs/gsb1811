@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="utf-8">
+<title>防嵌套防护实验室 · 控制台</title>
+<style>
+  :root { --bg:#0d1117; --panel:#161b22; --line:#30363d; --text:#e6edf3; --muted:#8b949e; --blue:#2f81f7; --green:#3fb950; --red:#f85149; --yellow:#d29922; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--text); }
+  header { padding:18px 28px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:12px; }
+  header h1 { font-size:18px; margin:0; }
+  header .sub { color:var(--muted); font-size:12px; }
+  .wrap { max-width:1180px; margin:22px auto; padding:0 20px; display:grid; grid-template-columns:340px 1fr; gap:18px; }
+  @media (max-width:900px){ .wrap{ grid-template-columns:1fr; } }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:18px; }
+  .panel h2 { font-size:14px; margin:0 0 12px; }
+  .switch { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 2px; border-bottom:1px dashed #21262d; font-size:13px; }
+  .switch:last-of-type { border-bottom:0; }
+  .switch .desc { display:block; color:var(--muted); font-size:11px; margin-top:2px; }
+  .toggle { position:relative; width:38px; height:21px; flex:0 0 auto; }
+  .toggle input { opacity:0; width:0; height:0; }
+  .slider { position:absolute; inset:0; background:#30363d; border-radius:999px; transition:.15s; cursor:pointer; }
+  .slider:before { content:""; position:absolute; width:17px; height:17px; left:2px; top:2px; background:#fff; border-radius:50%; transition:.15s; }
+  .toggle input:checked + .slider { background:var(--green); }
+  .toggle input:checked + .slider:before { transform:translateX(17px); }
+  .btn { display:inline-block; padding:8px 13px; border:1px solid var(--line); border-radius:6px; background:#21262d; color:var(--text); font-size:12.5px; cursor:pointer; text-decoration:none; }
+  .btn:hover { background:#30363d; border-color:#8b949e; }
+  .btn.primary { background:#1f6feb; border-color:#1f6feb; }
+  .btn.primary:hover { background:#388bfd; }
+  .btn.danger { color:#ffb3ad; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  .labs a { display:block; padding:9px 11px; border:1px solid var(--line); border-radius:8px; margin-bottom:8px; color:var(--blue); text-decoration:none; font-size:13px; }
+  .labs a:hover { border-color:var(--blue); background:#0d2240; }
+  .labs small { color:var(--muted); display:block; margin-top:2px; }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th, td { text-align:left; padding:7px 8px; border-bottom:1px solid #21262d; vertical-align:top; }
+  th { color:var(--muted); font-weight:500; position:sticky; top:0; background:var(--panel); }
+  .tag { font-size:10.5px; padding:1px 7px; border-radius:999px; white-space:nowrap; }
+  .tag.critical { background:#3d1418; color:#ff9492; }
+  .tag.warning { background:#3d2e08; color:#e3b341; }
+  .tag.info { background:#12292e; color:#56d4dd; }
+  .tag.csp,.tag.client,.tag.uitamper,.tag.framing,.tag.admin,.tag.error,.tag.honeypot,.tag.business { background:#21262d; color:var(--muted); }
+  .tablewrap { max-height:460px; overflow:auto; }
+  .msg { font-size:12px; margin-top:8px; min-height:16px; }
+  .msg.ok { color:var(--green); } .msg.err { color:var(--red); }
+  .filterbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
+  select { background:#21262d; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:6px 8px; font-size:12px; }
+  .compat li { margin-bottom:5px; font-size:12px; color:var(--muted); }
+  code { background:#21262d; padding:1px 5px; border-radius:4px; font-size:11px; color:#79c0ff; }
+  .empty { color:var(--muted); font-size:12px; padding:24px; text-align:center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🛡 防嵌套防护实验室</h2>
+  <span class="sub">frame-ancestors · X-Frame-Options · JS 防嵌套 · Web Worker UI 欺骗检测</span>
+</header>
+
+<div class="wrap">
+  <div>
+    <section class="panel">
+      <h2>防护开关（实时下发，刷新实验页生效）</h2>
+      <div id="switches"></div>
+      <div class="row">
+        <button class="btn primary" id="btn-save">保存配置</button>
+        <button class="btn" id="btn-reset">全部启用</button>
+      </div>
+      <div class="msg" id="cfg-msg"></div>
+    </section>
+
+    <section class="panel" style="margin-top:16px">
+      <h2>绕过 / 防护演示</h2>
+      <div class="labs">
+        <a href="http://localhost:9001/" target="_blank" rel="noopener">攻击者站点：经典点击劫持
+          <small>透明 iframe + 诱导按钮；防护全开时内容根本无法加载</small></a>
+        <a href="http://localhost:9001/sandbox.html" target="_blank" rel="noopener">攻击者站点：sandbox 绕过 frame-busting
+          <small>关掉 CSP/XFO 后，JS 跳转被 sandbox 吞掉，但 Worker 仍会告警</small></a>
+        <a href="http://localhost:9001/double.html" target="_blank" rel="noopener">攻击者站点：多层嵌套（窗口套窗口）
+          <small>双重 iframe，观察祖先来源链与逐层裁决</small></a>
+        <a href="http://localhost:9002/" target="_blank" rel="noopener">可信合作方：白名单嵌套
+          <small>frame-ancestors 允许的来源，页面正常加载</small></a>
+        <a href="/protected" target="_blank" rel="noopener">受保护页面本体（顶层窗口）
+          <small>http://localhost:8080/protected</small></a>
+      </div>
+    </section>
+
+    <section class="panel" style="margin-top:16px">
+      <h2>浏览器兼容性自检</h2>
+      <ul class="compat" id="compat"></ul>
+    </section>
+  </div>
+
+  <div>
+    <section class="panel">
+      <h2>安全事件报告</h2>
+      <div class="filterbar">
+        <label class="sub">类型
+          <select id="f-kind">
+            <option value="">全部</option>
+            <option value="csp">CSP 拦截</option>
+            <option value="framing">嵌套/防嵌套</option>
+            <option value="uitamper">UI 欺骗</option>
+            <option value="honeypot">蜜罐点击</option>
+            <option value="error">异常</option>
+            <option value="admin">配置变更</option>
+            <option value="business">业务</option>
+          </select>
+        </label>
+        <label class="sub">级别
+          <select id="f-sev">
+            <option value="">全部</option>
+            <option value="critical">critical</option>
+            <option value="warning">warning</option>
+            <option value="info">info</option>
+          </select>
+        </label>
+        <span style="flex:1"></span>
+        <button class="btn" id="btn-refresh">刷新</button>
+        <a class="btn" id="btn-csv" href="/api/reports?format=csv">导出 CSV</a>
+        <a class="btn" id="btn-json" href="/api/reports?format=json">导出 JSON</a>
+        <button class="btn danger" id="btn-clear">清空</button>
+      </div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>时间</th><th>级别</th><th>类型</th><th>检测器</th><th>说明</th></tr></thead>
+          <tbody id="report-body"></tbody>
+        </table>
+        <div class="empty" id="report-empty">暂无报告，去攻击者站点做一次实验后点击“刷新”。</div>
+      </div>
+      <div class="msg" id="report-msg"></div>
+    </section>
+  </div>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>

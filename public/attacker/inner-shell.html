@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>inner shell</title>
+<style>body{margin:0;font-family:system-ui,sans-serif}
+.bar{background:#3d2e08;color:#e3b341;font-size:12px;padding:6px 10px}
+iframe{width:100%;height:calc(100vh - 30px);border:2px dashed #d29922;background:#fff}</style>
+</head>
+<body>
+<div class="bar">攻击者内层壳 :9001（再嵌一层受保护页）</div>
+<iframe title="victim" src="http://localhost:8080/protected"></iframe>
+</body>
+</html>
